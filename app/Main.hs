@@ -1,6 +1,7 @@
 module Main where
 
 import Parser
+import Visualizer
 
 main :: IO ()
-main = parser
+main = parse >> visualize
