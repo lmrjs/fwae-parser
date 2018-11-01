@@ -1,13 +1,17 @@
-{-# LANGUAGE GADTs #-}
-
 module Parser
-    ( parser
-    ) where
+( parser
+) where
 
-import qualified Text.Parsec as Parsec
+import Text.Parsec (Parsec)
+import qualified Text.Parsec.Token as T       -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html
+import Text.ParserCombinators.Parsec          -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Combinator.html
+        (parse, letter, alphaNum, oneOf, (<|>))
+import Text.ParserCombinators.Parsec.Language -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Language.html
+        (emptyDef, identStart, identLetter, reservedNames)
 
+
+-- EBNF for FWAE --
 {-
-    EBNF:
     <FWAE> :: <num>
             | {<op> <FWAE> <FWAE>}
             | {with {<id> <FWAE>} <FWAE>}
@@ -16,14 +20,74 @@ import qualified Text.Parsec as Parsec
             | {<FWAE> <FWAE>}
             | {if0 <FWAE> <FWAE> <FWAE>}
     <op>   :: + | - | *
-    <id>   :: (* begins with letter, is alphanumeric or `-` or `_` or `*` *)
-              (* is none of `with`, `fun`, `+`, `-`, `*` *)
+    <id>   :: (* begins with letter, rest are alphanumeric or `-` or `_` or `*` *)
+              (* is none of `with`, `fun`, `if0`, `+`, `-`, `*` *)
+              (* these need to be statically checked during parsing *)
 -}
 
-data FAE where
-    Number :: (Num a, Show a) => {
-        num :: a
-    } -> FAE
 
+-- AST --
+data FAE =
+    Number { num :: Either Integer Double } |
+    Op     { op :: OpType, lhs :: FAE, rhs :: FAE } |
+    Id     { id :: String } |
+    Fun    { param :: String, body :: FAE } |
+    App    { fun :: FAE, arg :: FAE } |
+    If0    { cond :: FAE, on0 :: FAE, non0 :: FAE }
+    deriving Show
+data OpType = Add | Sub | Mul deriving Show
+
+
+-- Value and Environment --
+-- not really needed unless we will implement interp
+data Value =
+    NumV     { n :: Either Integer Double } |
+    ClosureV { fname :: String, fbody :: FAE, cenv :: Env }
+data Env = MtEnv | AnEnv { name :: String, value :: Value, restEnv :: Env }
+
+lookup :: String -> Env -> Value
+lookup str env = NumV $ Left 0 -- TODO
+
+
+-- Parser --
+allowedSymbols = ['_', '-', '*']
+reservedSymbols  = ["with", "fun", "if0", "+", "-", "*"]
+
+faeDef = emptyDef {
+    identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
+    identLetter   = alphaNum <|> oneOf allowedSymbols,
+    reservedNames = reservedSymbols
+}
+lexer = T.makeTokenParser faeDef
+
+-- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
+type Parser u a = Parsec String u a -- TODO: inputs String, outputs a -- so what does the `u` mean??
+identifier = T.identifier     lexer :: Parser u String                  -- begins with identStart, contains identLetter, is not reservedNames
+reserved   = T.reserved       lexer :: String -> Parser u ()            -- is one of reservedSymbols
+number     = T.naturalOrFloat lexer :: Parser u (Either Integer Double) -- returns a Left Integer or a Right Double
+whitespace = T.whiteSpace     lexer :: Parser u ()                      -- skips over whitespace
+braces     = T.braces         lexer :: Parser u a -> Parser u a         -- is enclosed in curly braces {...}
+
+-- actual parser
+parseFAE = whitespace -- TODO: combine parsers above (using parser combinators!) to parse FWAE
+
+
+-- Exported Functions --
 parser :: IO ()
-parser = putStrLn "TODO"
+parser = do
+    print "Enter FWAE code here. Use CTRL-C to exit."
+    input <- getContents -- TODO: figure out how to get all contents instead of just the first line
+    case parse parseFAE "" input of
+        Left  e -> print $ "Error parsing input: \n" ++ show e
+        Right r -> print r
+
+
+{-
+    Important Haskell concepts used in this file so far:
+        - modules, imports
+        - do syntax, case-of syntax
+        - ($) function application, (.) function composition, <|> whatever that is
+        - data constructors, record syntax, type synonyms
+        - typeclasses, `deriving`
+        - Either a b, Monad m or Applicative f (or neither, they're not that important for comprehension), IO a
+-}
