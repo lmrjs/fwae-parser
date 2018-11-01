@@ -2,7 +2,7 @@
 
 ;; WHAT IS A PARSER?
 
-;; p :: String -> Result
+;; p :: String -> (listof Result)
 (define-type Parser
   [parser (p procedure?)])
 
