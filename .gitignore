@@ -1,3 +1,4 @@
 .stack-work/
 fwae-parser.cabal
 *~
+*.bak
