@@ -21,6 +21,7 @@
                 empty
                 (list (result (string (first (string->list cs)))
                               (list->string (rest (string->list cs)))))))))
+                              
 ;; Parse the first character of a string but don't save it
 (define skip-char
   (parser (lambda (cs)
@@ -46,12 +47,17 @@
 (define (return value)
   (parser (lambda (str) (list (result value str)))))
 
+;; funnel :: Parser -> (String -> Parser) -> (listof Result)
+;; apply p to str, getting a value and rest of string;
+;; then, apply f to value to get p;
+;; finally, apply p' to rest of string
 (define (funnel p f str)
   (append* (map (lambda (res)
                   (parse (f (result-value res))
                          (result-rest res)))
                 (parse p str))))
 
+;; (>>=) :: Parser -> (String -> Parser) -> Parser
 (define (>>= p f)
   (parser (lambda (str)
             (append* (map (lambda (res)
@@ -79,9 +85,12 @@
 
 ;; PARSER COMBINATORS
 
+;; (>>) :: Parser -> Parser -> Parser
+;; parse using p1; then, ignoring value, parse remaining input using p2
 (define (>> p1 p2)
   (>>= p1 (lambda _ p2)))
 
+;; (<>) :: Parser -> Parser -> Parser
 (define (<> p1 p2)
   (parser (lambda (str)
             (append (parse p1 str) (parse p2 str)))))
@@ -106,3 +115,13 @@
 (test (parse (<> parse-num read-char) "") empty)
 (test (parse (<> parse-num read-char) "a") (list (result "a" "")))
 (test (parse (<> parse-num read-char) "10") (list (result 1 "0") (result "1" "0")))
+
+
+;; DO SYNTAX
+
+(parse (>>= p1 (lambda (v1)
+       (>>= p2 (lambda (v2)
+       (>>= p3 (lambda (v3)
+       ...
+       (f v1 v2 v3 ...)))))))
+  str)
