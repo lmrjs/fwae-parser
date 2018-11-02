@@ -28,48 +28,65 @@ import Text.ParserCombinators.Parsec.Language -- http://hackage.haskell.org/pack
 
 
 -- AST --
-data FAE =
-    Number { num :: Either Integer Double } |
-    Op     { op :: OpType, lhs :: FAE, rhs :: FAE } |
-    Id     { id :: String } |
-    Fun    { param :: String, body :: FAE } |
-    App    { fun :: FAE, arg :: FAE } |
-    If0    { cond :: FAE, on0 :: FAE, non0 :: FAE }
+data FAE = Number Double
+         | Op     OpType FAE FAE
+         | Id     String
+         | If0    FAE FAE FAE
+         | Fun    String FAE
+         | App    FAE FAE
     deriving Show
 data OpType = Add | Sub | Mul deriving Show
-
-
--- Value and Environment --
--- not really needed unless we will implement interp
-data Value =
-    NumV     { n :: Either Integer Double } |
-    ClosureV { fname :: String, fbody :: FAE, cenv :: Env }
-data Env = MtEnv | AnEnv { name :: String, value :: Value, restEnv :: Env }
-
-lookup :: String -> Env -> Value
-lookup str env = NumV $ Left 0 -- TODO
+data Value  = NumV Double | ClosureV String FAE Env deriving Show
+data Env    = MtEnv | AnEnv String Value Env deriving Show
 
 
 -- Parser --
-allowedSymbols = ['_', '-', '*']
-reservedSymbols  = ["with", "fun", "if0", "+", "-", "*"]
-
 lexer = P.makeTokenParser emptyDef {
     identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
-    identLetter   = alphaNum <|> oneOf allowedSymbols,
-    reservedNames = reservedSymbols
+    identLetter   = alphaNum <|> oneOf "_-*",
+    reservedNames = ["with", "fun", "if0", "+", "-", "*"]
 }
 
 -- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
 type Parser u a = Parsec String u a -- TODO: inputs String, outputs a -- so what does the `u` mean??
-identifier = P.identifier     lexer :: Parser u String                  -- begins with identStart, contains identLetter, is not reservedNames
-reserved   = P.reserved       lexer :: String -> Parser u ()            -- is one of reservedSymbols
-number     = P.naturalOrFloat lexer :: Parser u (Either Integer Double) -- returns a Left Integer or a Right Double
-whitespace = P.whiteSpace     lexer :: Parser u ()                      -- skips over whitespace
-braces     = P.braces         lexer :: Parser u a -> Parser u a         -- is enclosed in curly braces {...}
+identifier = P.identifier lexer :: Parser u String          -- begins with identStart, contains identLetter, is not reservedNames
+reserved   = P.reserved   lexer :: String -> Parser u ()    -- is one of reservedSymbols
+number     = P.float      lexer :: Parser u Double          -- returns a Left Integer or a Right Double
+whitespace = P.whiteSpace lexer :: Parser u ()              -- skips over whitespace
+braces     = P.braces     lexer :: Parser u a -> Parser u a -- is enclosed in curly braces {...}
 
 -- actual parser
 parser = whitespace -- TODO: combine parsers above (using parser combinators!) to parse FWAE
+
+
+-- Interpreter --
+
+lookupId :: String -> Env -> Value
+lookupId id MtEnv = error $ "Unbound identifier " ++ id
+lookupId id (AnEnv name value rest) =
+    if   name == id
+    then value
+    else lookupId id rest
+
+execOp :: OpType -> Value -> Value -> Value
+execOp Add (NumV n1) (NumV n2) = NumV $ n1 + n2
+execOp Sub (NumV n1) (NumV n2) = NumV $ n1 - n2
+execOp Mul (NumV n1) (NumV n2) = NumV $ n1 * n2
+
+interp :: FAE -> Value
+interp fae = helper fae MtEnv
+    where helper :: FAE -> Env -> Value
+          helper (Number n)          _   = NumV n
+          helper (Op op lhs rhs)     env = execOp op (helper lhs env) (helper rhs env)
+          helper (Id id)             env = lookupId id env
+          helper (Fun param body)    env = ClosureV param body env
+          helper (If0 cond on0 non0) env =
+            let NumV n = helper cond env
+            in  helper (if n == 0 then on0 else non0) env
+          helper (App fun arg) env =
+            let ClosureV param body cenv = helper fun env
+                argVal = helper arg env
+            in  helper body (AnEnv param argVal cenv)
 
 
 -- Exported Functions --
