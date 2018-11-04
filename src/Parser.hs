@@ -2,65 +2,80 @@ module Parser
 ( parse, FAE, OpType, Value, Env
 ) where
 
-import Text.Parsec (Parsec)
-import qualified Text.Parsec.Token as P       -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html
-import Text.ParserCombinators.Parsec          -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Combinator.html
-        (letter, alphaNum, oneOf, (<|>))
-import qualified Text.ParserCombinators.Parsec as PC (parse)
-import Text.ParserCombinators.Parsec.Language -- http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Language.html
-        (emptyDef, identStart, identLetter, reservedNames)
+import Control.Monad (unless)
+import Data.Functor (($>))
+import qualified Text.Parsec as PC (parse)
+import Text.Parsec
+    (Parsec, ParseError, choice, try, (<|>))
+import qualified Text.Parsec.Token as P
+import Text.Parsec.Language (emptyDef)
+import Text.Parsec.Char
+    (letter, alphaNum, oneOf)
 
 
 -- EBNF for FWAE --
 {-
     <FWAE> :: <num>
-            | {<op> <FWAE> <FWAE>}
-            | {with {<id> <FWAE>} <FWAE>}
             | <id>
+            | {<op> <FWAE> <FWAE>}
+            | {if0 <FWAE> <FWAE> <FWAE>}
             | {fun {<id>} <FWAE>}
             | {<FWAE> <FWAE>}
-            | {if0 <FWAE> <FWAE> <FWAE>}
+            | {with {<id> <FWAE>} <FWAE>}
     <op>   :: + | - | *
     <id>   :: (* begins with letter, rest are alphanumeric or `-` or `_` or `*` *)
               (* is none of `with`, `fun`, `if0`, `+`, `-`, `*` *)
-              (* these need to be statically checked during parsing *)
 -}
 
 
 -- AST --
 data FAE = Number Double
-         | Op     OpType FAE FAE
          | Id     String
+         | Op     OpType FAE FAE
          | If0    FAE FAE FAE
          | Fun    String FAE
          | App    FAE FAE
-    deriving Show
-data OpType = Add | Sub | Mul deriving Show
-data Value  = NumV Double | ClosureV String FAE Env deriving Show
-data Env    = MtEnv | AnEnv String Value Env deriving Show
+    deriving (Show, Eq)
+data OpType = Add | Sub | Mul deriving (Show, Eq)
+data Value  = NumV Double | ClosureV String FAE Env deriving (Show, Eq)
+data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 
 
 -- Parser --
 lexer = P.makeTokenParser emptyDef {
-    identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
-    identLetter   = alphaNum <|> oneOf "_-*",
-    reservedNames = ["with", "fun", "if0", "+", "-", "*"]
+    P.identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
+    P.identLetter   = alphaNum <|> oneOf "_-*",
+    P.reservedNames = ["with", "fun", "if0", "+", "-", "*"]
 }
 
 -- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
 type Parser u a = Parsec String u a -- TODO: inputs String, outputs a -- so what does the `u` mean??
 identifier = P.identifier lexer :: Parser u String          -- begins with identStart, contains identLetter, is not reservedNames
 reserved   = P.reserved   lexer :: String -> Parser u ()    -- is one of reservedSymbols
-number     = P.float      lexer :: Parser u Double          -- returns a Left Integer or a Right Double
+float      = P.float      lexer :: Parser u Double          -- returns a Double (must be a fraction or a decimal)
+integer    = P.integer    lexer :: Parser u Integer         -- returns an Integer (can be prefixed with - or +)
 whitespace = P.whiteSpace lexer :: Parser u ()              -- skips over whitespace
 braces     = P.braces     lexer :: Parser u a -> Parser u a -- is enclosed in curly braces {...}
 
 -- actual parser
-parser = whitespace -- TODO: combine parsers above (using parser combinators!) to parse FWAE
+floatParser   = return (Id "TODO") :: Parser u FAE
+integerParser = return (Id "TODO") :: Parser u FAE
+idParser      = return (Id "TODO") :: Parser u FAE
+opTypeParser  = return (Id "TODO") :: Parser u FAE
+opParser      = return (Id "TODO") :: Parser u FAE
+if0Parser     = return (Id "TODO") :: Parser u FAE
+funParser     = return (Id "TODO") :: Parser u FAE
+appParser     = return (Id "TODO") :: Parser u FAE
+withParser    = return (Id "TODO") :: Parser u FAE
+
+parser :: Parser u FAE
+parser = return (Id "TODO: combine above parsers")
+
+execParse :: String -> Either ParseError FAE
+execParse = PC.parse parser ""
 
 
 -- Interpreter --
-
 lookupId :: String -> Env -> Value
 lookupId id MtEnv = error $ "Unbound identifier " ++ id
 lookupId id (AnEnv name value rest) =
@@ -73,6 +88,7 @@ execOp Add (NumV n1) (NumV n2) = NumV $ n1 + n2
 execOp Sub (NumV n1) (NumV n2) = NumV $ n1 - n2
 execOp Mul (NumV n1) (NumV n2) = NumV $ n1 * n2
 
+-- TODO: allow explicit errors by changing return value to either Just Value or Either String Value
 interp :: FAE -> Value
 interp fae = helper fae MtEnv
     where helper :: FAE -> Env -> Value
@@ -92,19 +108,24 @@ interp fae = helper fae MtEnv
 -- Exported Functions --
 parse :: IO ()
 parse = do
-    print "Enter FWAE code here. Use CTRL-C to exit."
-    input <- getContents -- TODO: figure out how to get all contents instead of just the first line
-    case PC.parse parser "" input of
-        Left  e -> print $ "Error parsing input: \n" ++ show e
-        Right r -> print r
+    putStrLn "Enter FWAE code on a single line. Use :q to exit."
+    let doParse input =
+            case execParse input of
+                Left  e -> putStrLn "Error parsing input:" >> print e
+                Right r -> print r
+        inputLoop = do
+            input <- getLine
+            if   (input == ":q")
+            then putStrLn "Exiting..."
+            else doParse input >> inputLoop
+    inputLoop
 
 
 {-
     Important Haskell concepts used in this file so far:
         - modules, imports
         - do syntax, case-of syntax
-        - ($) function application, (.) function composition, <|> whatever that is
-        - data constructors, record syntax, type synonyms
+        - data constructors, type synonyms
         - typeclasses, `deriving`
-        - Either a b, Monad m or Applicative f (or neither, they're not that important for comprehension), IO a
+        - Either a b, Functor f, Applicative f, Monad m, IO a
 -}
