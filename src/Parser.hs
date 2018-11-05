@@ -45,7 +45,7 @@ data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 lexer = P.makeTokenParser emptyDef {
     P.identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
     P.identLetter   = alphaNum <|> oneOf "_-*",
-    P.reservedNames = ["with", "fun", "if0"]
+    P.reservedNames = ["with", "fun", "if0", "+", "-", "*"]
 }
 
 -- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
@@ -78,7 +78,7 @@ parser :: Parser u FAE
 parser = return (Id "TODO: combine above parsers")
 
 execParse :: String -> Either ParseError FAE
-execParse = PC.parse (parser <* eof) ""
+execParse = PC.parse (whitespace >> parser <* eof) ""
 
 
 -- Interpreter --
