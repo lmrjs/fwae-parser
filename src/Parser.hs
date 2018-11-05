@@ -1,16 +1,16 @@
 module Parser
-( parse, FAE, OpType, Value, Env
-) where
+    (parse, execParse, FAE(..), OpType(..), Value(..), Env(..)) where
 
-import Control.Monad (unless)
 import Data.Functor (($>))
+import Control.Applicative ((<*))
+import Control.Monad (unless)
 import qualified Text.Parsec as PC (parse)
 import Text.Parsec
-    (Parsec, ParseError, choice, try, (<|>))
+    (Parsec, ParseError, choice, try, eof, (<|>))
 import qualified Text.Parsec.Token as P
 import Text.Parsec.Language (emptyDef)
 import Text.Parsec.Char
-    (letter, alphaNum, oneOf)
+    (char, letter, alphaNum, oneOf)
 
 
 -- EBNF for FWAE --
@@ -45,17 +45,23 @@ data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 lexer = P.makeTokenParser emptyDef {
     P.identStart    = letter,         -- for convenience, enforce that identifiers must begin with a letter [a-zA-Z] (TODO: maybe figure out how to prevent numbers from being identifiers)
     P.identLetter   = alphaNum <|> oneOf "_-*",
-    P.reservedNames = ["with", "fun", "if0", "+", "-", "*"]
+    P.reservedNames = ["with", "fun", "if0"]
 }
 
 -- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
 type Parser u a = Parsec String u a -- TODO: inputs String, outputs a -- so what does the `u` mean??
 identifier = P.identifier lexer :: Parser u String          -- begins with identStart, contains identLetter, is not reservedNames
 reserved   = P.reserved   lexer :: String -> Parser u ()    -- is one of reservedSymbols
-float      = P.float      lexer :: Parser u Double          -- returns a Double (must be a fraction or a decimal)
 integer    = P.integer    lexer :: Parser u Integer         -- returns an Integer (can be prefixed with - or +)
+lexeme     = P.lexeme     lexer :: Parser u a -> Parser u a -- parses as a lexeme (strips whitespace from end)
 whitespace = P.whiteSpace lexer :: Parser u ()              -- skips over whitespace
 braces     = P.braces     lexer :: Parser u a -> Parser u a -- is enclosed in curly braces {...}
+float = lexeme sign <*> P.float lexer :: Parser u Double    -- P.float does not parse sign!!
+
+-- stolen from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/src/Text.Parsec.Token.html#local-6989586621679063899
+sign =   char '-' $> negate
+     <|> char '+' $> id
+     <|> return id
 
 -- actual parser
 floatParser   = return (Id "TODO") :: Parser u FAE
@@ -72,7 +78,7 @@ parser :: Parser u FAE
 parser = return (Id "TODO: combine above parsers")
 
 execParse :: String -> Either ParseError FAE
-execParse = PC.parse parser ""
+execParse = PC.parse (parser <* eof) ""
 
 
 -- Interpreter --
