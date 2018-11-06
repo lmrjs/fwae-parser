@@ -1,9 +1,10 @@
 module Parser
-    (parse, execParse, FAE(..), OpType(..), Value(..), Env(..)) where
+    (runParse, parse, FAE(..), OpType(..), Value(..), Env(..)) where
 
 import Data.Functor (($>))
 import Control.Applicative ((<*))
 import Control.Monad (unless)
+import Text.Groom (groom)
 import qualified Text.Parsec as PC (parse)
 import Text.Parsec
     (Parsec, ParseError, choice, try, eof, (<|>))
@@ -77,52 +78,24 @@ withParser    = return (Id "TODO") :: Parser u FAE
 parser :: Parser u FAE
 parser = return (Id "TODO: combine above parsers")
 
-execParse :: String -> Either ParseError FAE
-execParse = PC.parse (whitespace >> parser <* eof) ""
-
-
--- Interpreter --
-lookupId :: String -> Env -> Value
-lookupId id MtEnv = error $ "Unbound identifier " ++ id
-lookupId id (AnEnv name value rest) =
-    if   name == id
-    then value
-    else lookupId id rest
-
-execOp :: OpType -> Value -> Value -> Value
-execOp Add (NumV n1) (NumV n2) = NumV $ n1 + n2
-execOp Sub (NumV n1) (NumV n2) = NumV $ n1 - n2
-execOp Mul (NumV n1) (NumV n2) = NumV $ n1 * n2
-
--- TODO: allow explicit errors by changing return value to either Just Value or Either String Value
-interp :: FAE -> Value
-interp fae = helper fae MtEnv
-    where helper :: FAE -> Env -> Value
-          helper (Number n)          _   = NumV n
-          helper (Op op lhs rhs)     env = execOp op (helper lhs env) (helper rhs env)
-          helper (Id id)             env = lookupId id env
-          helper (Fun param body)    env = ClosureV param body env
-          helper (If0 cond on0 non0) env =
-            let NumV n = helper cond env
-            in  helper (if n == 0 then on0 else non0) env
-          helper (App fun arg) env =
-            let ClosureV param body cenv = helper fun env
-                argVal = helper arg env
-            in  helper body (AnEnv param argVal cenv)
+parse :: String -> Either String FAE
+parse input = case PC.parse (whitespace >> parser <* eof) "" input of
+    Left  e   -> Left $ show e
+    Right fae -> Right fae
 
 
 -- Exported Functions --
-parse :: IO ()
-parse = do
-    putStrLn "Enter FWAE code on a single line. Use :q to exit."
+runParse :: IO ()
+runParse = do
     let doParse input =
-            case execParse input of
-                Left  e -> putStrLn "Error parsing input:" >> print e
-                Right r -> print r
+            case parse input of
+                Left  e   -> putStrLn $ "Error parsing input:\n" ++ e
+                Right fae -> putStrLn . groom $ fae
         inputLoop = do
+            putStrLn "Enter FWAE code on a single line. Use :c to close."
             input <- getLine
-            if   (input == ":q")
-            then putStrLn "Exiting..."
+            if   (input == ":c")
+            then putStrLn "Closing parser..."
             else doParse input >> inputLoop
     inputLoop
 
