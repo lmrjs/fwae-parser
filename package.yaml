@@ -1,10 +1,10 @@
 name:                fwae-parser
 version:             0.1.0.0
-github:              "ionathanch/fwae-parser"
+github:              "lmrjs/fwae-parser"
 license:             BSD3
-author:              "Jonathan Chan"
-maintainer:          "afnl686@gmail.com"
-copyright:           "2018 Jonathan Chan"
+author:              "LMRJS"
+maintainer:          ""
+copyright:           "2018 Megha Singhania, Ryan Chen, Jonathan Chan, Samuel Or"
 
 extra-source-files:
 - README.md
@@ -17,13 +17,14 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/ionathanch/fwae-parser#readme>
+description:         Please see the README on GitHub at <https://github.com/lmrjs/fwae-parser#readme>
 
 dependencies:
-- base >= 4.7 && < 5
+- base >= 4.5 && < 4.10
 - parsec
 - hspec
 - groom
+# - ghc-vis
 
 library:
   source-dirs: src
