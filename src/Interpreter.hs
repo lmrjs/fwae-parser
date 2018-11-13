@@ -1,5 +1,5 @@
 module Interpreter
-    (runInterp, interp, interpTree, run, runTree, CallTree(..), Metadata) where
+    (runInterp, interp, interpTree, run, runTree, CallTree(..), Value(..), Env(..), Metadata) where
 
 import Parser
 import Text.Groom (groom)
@@ -13,6 +13,8 @@ data CallTree = NumberTree Metadata
               | FunTree    Metadata
               | AppTree    Metadata CallTree CallTree CallTree -- fun arg app
     deriving (Show, Eq)
+data Value  = NumV Double | ClosureV String FAE Env deriving (Show, Eq)
+data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 type Metadata = (Value, Env)
 
 
@@ -33,11 +35,11 @@ isClosureV :: String -> Value -> Either String Value
 isClosureV _   closure@(ClosureV _ _ _) = Right closure
 isClosureV msg errorVal                 = Left $ msg ++ groom errorVal
 
-lookupId :: String -> Env -> Value
-lookupId id MtEnv = error $ "Unbound identifier " ++ id
+lookupId :: String -> Env -> Either String Value
+lookupId id MtEnv = Left $ "Unbound identifier " ++ id
 lookupId id (AnEnv name value rest) =
     if   name == id
-    then value
+    then Right value
     else lookupId id rest
 
 execOp :: OpType -> Value -> Value -> Value
@@ -58,7 +60,7 @@ interp fae = helper fae MtEnv
             leftVal  <- helper lhs env
             rightVal <- helper rhs env
             Right $ execOp op leftVal rightVal
-          helper (Id id)             env = Right $ lookupId id env
+          helper (Id id)             env = lookupId id env
           helper (Fun param body)    env = Right $ ClosureV param body env
           helper (If0 cond on0 non0) env = do
             condVal <- helper cond env
@@ -83,15 +85,11 @@ interpTree fae = helper fae MtEnv
 
 
 -- Run from direct FWAE code
-run :: String -> Value
-run input = case parse input >>= interp of
-    Left  e   -> error $ show e
-    Right fae -> fae
+run :: String -> Either String Value
+run input = parse input >>= interp
 
-runTree :: String -> CallTree
-runTree input = case parse input >>= interpTree of
-    Left  e    -> error $ show e
-    Right tree -> tree
+runTree :: String -> Either String CallTree
+runTree input = parse input >>= interpTree
 
 runInterp :: IO ()
 runInterp = do

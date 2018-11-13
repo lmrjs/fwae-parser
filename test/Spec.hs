@@ -1,9 +1,18 @@
 import Parser
+import Interpreter
 import Test.Hspec
 
 isParseError :: Either parseError FAE -> Bool
 isParseError (Left _) = True
 isParseError _ = False
+
+isInterpError :: Either String CallTree -> Bool
+isInterpError (Left _) = True
+isInterpError _ = False
+
+-- TODO: type these properly
+-- (<=>) = shouldBe
+-- (<->) = shouldSatisfy
 
 main :: IO ()
 main = hspec $ do
@@ -43,7 +52,7 @@ main = hspec $ do
                     `shouldBe` Right (If0 (Op Add (Number 1) (Number 2))
                                           (Op Sub (Number 3) (Number 4))
                                           (Op Mul (Number 5) (Number 6)))
-        describe "Fun" $ do
+        describe "Function" $ do
             it "identifier body" $ do
                 parse "{fun {x} x}" `shouldBe` Right (Fun "x" (Id "x"))
             it "number body" $ do
@@ -55,7 +64,7 @@ main = hspec $ do
                 parse "{fun {} 1}" `shouldSatisfy` isParseError
             it "too many params" $ do
                 parse "{fun {x y} 1}" `shouldSatisfy` isParseError
-        describe "App" $ do
+        describe "Application" $ do
             it "apply number to number" $ do
                 parse "{0 1}" `shouldBe` Right (App (Number 0) (Number 1))
             it "apply function to number" $ do
@@ -90,6 +99,102 @@ main = hspec $ do
             it "mismatched braces" $ do
                 parse "{{fun {x} x 1}" `shouldSatisfy` isParseError
     describe "Interpreter" $ do
-        it "TODO" $ do
-            True `shouldBe` True
+        describe "Identifier" $ do
+            it "unbound identifier" $ do
+                runTree "x" `shouldSatisfy` isInterpError
+        describe "Number" $ do
+            it "positive float" $ do
+                runTree "1.3" `shouldBe` Right (NumberTree (NumV 1.3, MtEnv))
+            it "negative float" $ do
+                runTree "-2.4" `shouldBe` Right (NumberTree (NumV (-2.4), MtEnv))
+            it "zero float" $ do
+                runTree "0" `shouldBe` Right (NumberTree (NumV 0, MtEnv))
+        describe "Operator" $ do
+            it "addition" $ do
+                runTree "{+ 1 2}"
+                    `shouldBe` Right (OpTree (NumV 3, MtEnv) 
+                                             (NumberTree (NumV 1, MtEnv)) 
+                                             (NumberTree (NumV 2, MtEnv)))
+            it "subtraction" $ do
+                runTree "{- 4 5}"
+                    `shouldBe` Right (OpTree (NumV (-1), MtEnv)
+                                             (NumberTree (NumV 4, MtEnv)) 
+                                             (NumberTree (NumV 5, MtEnv)))
+            it "multiplication" $ do
+                runTree "{* 6 7}"
+                    `shouldBe` Right (OpTree (NumV 42, MtEnv)
+                                             (NumberTree (NumV 6, MtEnv))
+                                             (NumberTree (NumV 7, MtEnv)))
+            it "nested operations" $ do
+                runTree "{* {+ 1 2} {- 4 5}}"
+                    `shouldBe` Right (OpTree (NumV (-3), MtEnv)
+                                             (OpTree (NumV 3, MtEnv)
+                                                     (NumberTree (NumV 1, MtEnv))
+                                                     (NumberTree (NumV 2, MtEnv)))
+                                             (OpTree (NumV (-1), MtEnv)
+                                                     (NumberTree (NumV 4, MtEnv))
+                                                     (NumberTree (NumV 5, MtEnv))))
+        describe "If0" $ do
+            it "true condition" $ do
+                runTree "{if0 0 1 10}"
+                    `shouldBe` Right (If0Tree (NumV 1, MtEnv)
+                                              (NumberTree (NumV 0, MtEnv))   -- cond
+                                              (NumberTree (NumV 1, MtEnv)))  -- on0
+            it "false condition" $ do
+                runTree "{if0 1 1 10}" 
+                    `shouldBe` Right (If0Tree (NumV 10, MtEnv)
+                                              (NumberTree (NumV 1, MtEnv))   -- cond
+                                              (NumberTree (NumV 10, MtEnv))) -- non0
+            it "error on non-number condition" $ do
+                runTree "{with {f {fun {x} x}} {if0 x 1 10}}" `shouldSatisfy` isInterpError
+        describe "Function" $ do -- TODO
+            it "simple function" $ do
+                runTree "{fun {x} 0}"
+                    `shouldBe` Right (FunTree (ClosureV "x" (Number 0) MtEnv, MtEnv))
+        describe "Application" $ do -- TODO
+            it "simple function application" $ do
+                runTree "{{fun {x} 0} 10}"
+                    `shouldBe` Right (AppTree (NumV 0, MtEnv)
+                                              (FunTree (ClosureV "x" (Number 0) MtEnv, MtEnv))
+                                              (NumberTree (NumV 10, MtEnv))
+                                              (NumberTree (NumV 0, (AnEnv "x" (NumV 10) MtEnv))))
+            it "error applying non-closure" $ do
+                runTree "{0 0}" `shouldSatisfy` isInterpError
+        describe "Other" $ do -- TODO
+            it "complex nested expression" $ do
+                runTree "{with {f {fun {x} {* 2 x}}} {+ 10 {f 5}}}"
+                -- This desugars into:
+                {-
+                   {{fun {f} 
+                      {+ 10 
+                         {f 5}}}
+                    {fun {x} 
+                      {* 2 x}}}
+                -}
+                -- And so its interp tree should resemble:
+                {-
+                    AppTree
+                        FunTree (f)
+                        FunTree (x)
+                        OpTree (+ 10 (f 5)) (body of function applied)
+                            NumTree (10)
+                            AppTree (f 5)
+                                IdTree (f)
+                                NumberTree (5)
+                                OpTree (* 2 x) (body of function applied)
+                                    NumTree (2)
+                                    IdTree (x)
+                -}
+                    `shouldBe`
+                    Right (AppTree (NumV 20, MtEnv)
+                                   (FunTree (ClosureV "f" (Op Add (Number 10) (App (Id "f") (Number 5))) MtEnv, MtEnv))
+                                   (FunTree (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv, MtEnv))
+                                   (OpTree (NumV 20, AnEnv "f" (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv) MtEnv)
+                                           (NumberTree (NumV 10, AnEnv "f" (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv) MtEnv))
+                                           (AppTree (NumV 10, AnEnv "f" (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv) MtEnv)
+                                                    (IdTree (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv, AnEnv "f" (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv) MtEnv))
+                                                    (NumberTree (NumV 5, AnEnv "f" (ClosureV "x" (Op Mul (Number 2) (Id "x")) MtEnv) MtEnv))
+                                                    (OpTree (NumV 10, AnEnv "x" (NumV 5) MtEnv)
+                                                        (NumberTree (NumV 2, AnEnv "x" (NumV 5) MtEnv))
+                                                        (IdTree (NumV 5, AnEnv "x" (NumV 5) MtEnv))))))
             

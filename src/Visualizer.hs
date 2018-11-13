@@ -2,5 +2,8 @@ module Visualizer
 ( visualize
 ) where
 
+import Interpreter
+
 visualize :: IO ()
-visualize = print "TODO"
+visualize = do
+    return ()

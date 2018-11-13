@@ -1,5 +1,5 @@
 module Parser
-    (runParse, parse, FAE(..), OpType(..), Value(..), Env(..)) where
+    (runParse, parse, FAE(..), OpType(..)) where
 
 import Data.Functor (($>))
 import Control.Applicative ((<*))
@@ -38,8 +38,6 @@ data FAE = Number Double
          | App    FAE FAE
     deriving (Show, Eq)
 data OpType = Add | Sub | Mul deriving (Show, Eq)
-data Value  = NumV Double | ClosureV String FAE Env deriving (Show, Eq)
-data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 
 
 -- Parser --
