@@ -65,7 +65,7 @@ appNonClosureErrorMsg = "Interp error: attempted to apply following non-closure 
 interp :: FAE -> Either String Value
 interp fae = helper fae MtEnv
     where helper :: FAE -> Env -> Either String Value
-          helper (Number n)          _   = Right $ NumV n
+          helper (Number n)           _  = Right $ NumV n
           helper (Op op lhs rhs)     env = do
             leftVal  <- helper lhs env
             rightVal <- helper rhs env
@@ -89,8 +89,8 @@ interpTree fae = helper fae MtEnv
           helper (Number n)          env = Right $ NumberTree (NumV n, env)
           helper (Op op lhs rhs)     env = do 
             n <- interp fae
-            lTree <- interpTree lhs env
-            rTree <- interpTree rhs env
+            lTree <- interpTree lhs 
+            rTree <- interpTree rhs 
             Right $ OpTree (n, env) lTree rTree
           helper (Id id)             env = do
             n <- lookupId id env
@@ -99,24 +99,24 @@ interpTree fae = helper fae MtEnv
             n <- interp fae 
             Right $ FunTree (n, env)
           helper (If0 cond on0 non0) env = do    -- cond might be string
-            cond <- interp cond env
-            condTree <- interpTree cond env
-            if cond == 0 
-            then 
-              n <- interp on0 env
-              on0Tree <- interpTree on0 env
+            condition <- interp cond 
+            condTree <- interpTree cond 
+            if condition == (NumV 0)
+            then do 
+              n <- interp on0 
+              on0Tree <- interpTree on0 
               Right $ If0Tree (n, env) condTree on0Tree
-            else 
-              n <- interp non0 env
-              non0Tree <- interpTree non0 env
+            else do
+              n <- interp non0 
+              non0Tree <- interpTree non0 
               Right $ If0Tree (n, env) condTree non0Tree
-          helper (App fun arg)       env = 
+          helper (App fun arg)       env = do
               n <- interp fae 
-              argTree <- interpTree arg env
+              argTree <- interpTree arg 
               ClosureV param body cenv <- interp fun 
-              funTree <- interpTree fun env
-              app <- NumberTree (NumV n, (AnEnv param (getValue argTree) cenv))
-            Right $ AppTree (n, env) argTree funTree app
+              funTree <- interpTree fun 
+              app <- Right $ NumberTree (n, (AnEnv param (getValue argTree) cenv))
+              Right $ AppTree (n, env) argTree funTree app
 
 
 -- Run from direct FWAE code
