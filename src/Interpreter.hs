@@ -1,8 +1,9 @@
 module Interpreter
-    (runInterp, interp, interpTree, run, runTree, CallTree(..), Value(..), Env(..), Metadata) where
+    (runInterp, interp, interpTree, run, runTree, callTreeToTree, CallTree(..), Value(..), Env(..), Metadata) where
 
 import Parser
 import Text.Groom (groom)
+import Data.Tree (Tree(Node))
 
 
 -- Call Tree --
@@ -16,6 +17,15 @@ data CallTree = NumberTree Metadata
 data Value  = NumV Double | ClosureV String FAE Env deriving (Show, Eq)
 data Env    = MtEnv | AnEnv String Value Env deriving (Show, Eq)
 type Metadata = (Value, Env)
+
+-- convert a CallTree to a Tree for pretty-printing
+callTreeToTree :: CallTree -> Tree (String, Value, Env)
+callTreeToTree (NumberTree (val, env))             = Node ("Number", val, env) []
+callTreeToTree (IdTree     (val, env))             = Node ("Id",     val, env) []
+callTreeToTree (OpTree     (val, env) lhs rhs)     = Node ("Op",     val, env) $ map callTreeToTree [lhs, rhs]
+callTreeToTree (If0Tree    (val, env) cond run)    = Node ("If0",    val, env) $ map callTreeToTree [cond, run]
+callTreeToTree (FunTree    (val, env))             = Node ("Fun",    val, env) []
+callTreeToTree (AppTree    (val, env) fun arg app) = Node ("App",    val, env) $ map callTreeToTree [fun, arg, app]
 
 
 -- Helpers --
@@ -119,7 +129,7 @@ runTree input = parse input >>= interpTree
 runInterp :: IO ()
 runInterp = do
     let doParse input =
-            case parse input >>= interpTree of
+            case runTree input of
                 Left  e    -> putStrLn e
                 Right tree -> putStrLn . groom $ tree
         inputLoop = do

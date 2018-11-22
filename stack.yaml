@@ -42,6 +42,7 @@ extra-deps:
 - ghc-vis-0.9
 - svgcairo-0.13.1.1
 - xdot-0.3.0.1
+- pretty-tree-0.1.0.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
