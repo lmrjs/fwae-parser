@@ -30,6 +30,9 @@ import Text.Parsec.Char
 
 
 -- AST --
+data NumV = Integer
+            | Double
+            deriving (Show, Eq)
 data FAE = Number Double
          | Id     String
          | Op     OpType FAE FAE
@@ -62,19 +65,45 @@ sign =   char '-' $> negate
      <|> char '+' $> id
      <|> return id
 
+toOpType :: String -> OpType
+toOpType "+" = Add
+toOpType "-" = Sub
+toOpType "*" = Mul
+
+removeFrontWhiteSpace :: String -> String
+if head x == ' '
+    then removeFrontWhiteSpace tail x
+    else x
+
 -- actual parser
-floatParser   = return (Id "TODO") :: Parser u FAE
-integerParser = return (Id "TODO") :: Parser u FAE
-idParser      = return (Id "TODO") :: Parser u FAE
-opTypeParser  = return (Id "TODO") :: Parser u FAE
-opParser      = return (Id "TODO") :: Parser u FAE
+floatParser   = do
+    n <- float
+    return (Number n)
+integerParser = do
+    n <- integer
+    return (Number (fromInteger n :: Double))
+idParser      = do
+    id <- identifier
+    return (Id id)
+opTypeParser  = do
+    op <- identifier
+    return (toOpType op)
+opParser      = do { op <- braces
+                ; op2 <- identifier
+                --; l <- lexeme
+                --; r <- lexeme
+                --; let optype = parse op
+                --; let l = parse l
+                --; let r = parse r
+                ; return (op2) }
 if0Parser     = return (Id "TODO") :: Parser u FAE
 funParser     = return (Id "TODO") :: Parser u FAE
 appParser     = return (Id "TODO") :: Parser u FAE
 withParser    = return (Id "TODO") :: Parser u FAE
 
 parser :: Parser u FAE
-parser = return (Id "TODO: combine above parsers")
+parser = choice $
+    map try [floatParser, integerParser, idParser, opParser, if0Parser, funParser, appParser, withParser]
 
 parse :: String -> Either String FAE
 parse input = case PC.parse (whitespace >> parser <* eof) "" input of
