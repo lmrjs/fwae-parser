@@ -51,14 +51,14 @@ lexer = P.makeTokenParser emptyDef {
 }
 
 -- a curated selection of parsers from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/Text-Parsec-Token.html#t:GenTokenParser
-type Parser u a = Parsec String u a -- TODO: inputs String, outputs a -- so what does the `u` mean??
-identifier = P.identifier lexer :: Parser u String          -- begins with identStart, contains identLetter, is not reservedNames
-reserved   = P.reserved   lexer :: String -> Parser u ()    -- is one of reservedSymbols
-integer    = P.integer    lexer :: Parser u Integer         -- returns an Integer (can be prefixed with - or +)
-lexeme     = P.lexeme     lexer :: Parser u a -> Parser u a -- parses as a lexeme (strips whitespace from end)
-whitespace = P.whiteSpace lexer :: Parser u ()              -- skips over whitespace
-braces     = P.braces     lexer :: Parser u a -> Parser u a -- is enclosed in curly braces {...}
-float = lexeme sign <*> P.float lexer :: Parser u Double    -- P.float does not parse sign!!
+type Parser = Parsec String ()
+identifier = P.identifier lexer :: Parser String          -- begins with identStart, contains identLetter, is not reservedNames
+reserved   = P.reserved   lexer :: String -> Parser ()    -- is one of reservedSymbols
+integer    = P.integer    lexer :: Parser Integer         -- returns an Integer (can be prefixed with - or +)
+lexeme     = P.lexeme     lexer :: Parser a -> Parser a   -- parses as a lexeme (strips whitespace from end)
+whitespace = P.whiteSpace lexer :: Parser ()              -- skips over whitespace
+braces     = P.braces     lexer :: Parser a -> Parser a   -- is enclosed in curly braces {...}
+float = lexeme sign <*> P.float lexer :: Parser Double    -- P.float does not parse sign!!
 
 -- stolen from http://hackage.haskell.org/package/parsec-3.1.13.0/docs/src/Text.Parsec.Token.html#local-6989586621679063899
 sign =   char '-' $> negate
@@ -101,9 +101,16 @@ funParser     = return (Id "TODO") :: Parser u FAE
 appParser     = return (Id "TODO") :: Parser u FAE
 withParser    = return (Id "TODO") :: Parser u FAE
 
-parser :: Parser u FAE
-parser = choice $
-    map try [floatParser, integerParser, idParser, opParser, if0Parser, funParser, appParser, withParser]
+parser :: Parser FAE
+parser = choice $ map try
+    [ floatParser
+    , integerParser
+    , idParser
+    , opParser
+    , if0Parser
+    , funParser
+    , appParser
+    , withParser ]
 
 parse :: String -> Either String FAE
 parse input = case PC.parse (whitespace >> parser <* eof) "" input of
