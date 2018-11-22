@@ -76,12 +76,37 @@ interpTree :: FAE -> Either String CallTree
 interpTree fae = helper fae MtEnv
     where dummyTree = IdTree (NumV 0, MtEnv) -- TODO: implement interp producing call tree
           helper :: FAE -> Env -> Either String CallTree
-          helper (Number n)          env = Right $ dummyTree
-          helper (Op op lhs rhs)     env = Right $ dummyTree
-          helper (Id id)             env = Right $ dummyTree
-          helper (Fun param body)    env = Right $ dummyTree
-          helper (If0 cond on0 non0) env = Right $ dummyTree
-          helper (App fun arg)       env = Right $ dummyTree
+          helper (Number n)          env = Right $ NumberTree (NumV n, env)
+          helper (Op op lhs rhs)     env = do 
+            n <- interp fae
+            lTree <- interpTree lhs env
+            rTree <- interpTree rhs env
+            Right $ OpTree (n, env) lTree rTree
+          helper (Id id)             env = do
+            n <- lookupId id env
+            Right $ IdTree (n, env)
+          helper (Fun param body)    env = do
+            n <- interp fae 
+            Right $ FunTree (n, env)
+          helper (If0 cond on0 non0) env = do    -- cond might be string
+            cond <- interp cond env
+            condTree <- interpTree cond env
+            if cond == 0 
+            then 
+              n <- interp on0 env
+              on0Tree <- interpTree on0 env
+              Right $ If0Tree (n, env) condTree on0Tree
+            else 
+              n <- interp non0 env
+              non0Tree <- interpTree non0 env
+              Right $ If0Tree (n, env) condTree non0Tree
+          helper (App fun arg)       env = 
+              n <- interp fae 
+              argTree <- interpTree arg env
+              ClosureV param body cenv <- interp fun 
+              funTree <- interpTree fun env
+              app <- NumberTree (NumV n, (AnEnv param (getValue argTree) cenv))
+            Right $ AppTree (n, env) argTree funTree app
 
 
 -- Run from direct FWAE code
