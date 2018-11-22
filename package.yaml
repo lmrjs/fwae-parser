@@ -25,7 +25,8 @@ dependencies:
 - hspec
 - hspec-expectations
 - groom
-# - ghc-vis
+- containers
+- pretty-tree
 
 library:
   source-dirs: src

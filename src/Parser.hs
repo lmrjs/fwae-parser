@@ -1,6 +1,7 @@
 module Parser
-    (runParse, parse, FAE(..), OpType(..)) where
+    (runParse, parse, faeToTree, FAE(..), OpType(..)) where
 
+import Data.Tree (Tree(Node))
 import Data.Functor (($>))
 import Control.Applicative ((<*))
 import Control.Monad (unless)
@@ -42,6 +43,15 @@ data FAE = Number Double
     deriving (Show, Eq)
 data OpType = Add | Sub | Mul deriving (Show, Eq)
 
+-- convert an FAE into a Tree for pretty-printing
+faeToTree :: FAE -> Tree String
+faeToTree (Number n)          = Node ("Number: "         ++ show n)      []
+faeToTree (Id id)             = Node ("Id: "             ++ id)          []
+faeToTree (Fun param body)    = Node ("Fun with param: " ++ param)       [faeToTree body]
+faeToTree (Op optype lhs rhs) = Node ("Op: "             ++ show optype) $ map faeToTree [lhs, rhs]
+faeToTree (If0 cond on0 non0) = Node "If0" $ map faeToTree [cond, on0, non0]
+faeToTree (App fun arg)       = Node "App" $ map faeToTree [fun, arg]
+
 
 -- Parser --
 lexer = P.makeTokenParser emptyDef {
@@ -65,41 +75,71 @@ sign =   char '-' $> negate
      <|> char '+' $> id
      <|> return id
 
-toOpType :: String -> OpType
-toOpType "+" = Add
-toOpType "-" = Sub
-toOpType "*" = Mul
-
-removeFrontWhiteSpace :: String -> String
-if head x == ' '
-    then removeFrontWhiteSpace tail x
-    else x
-
 -- actual parser
-floatParser   = do
+floatParser = do
     n <- float
     return (Number n)
 integerParser = do
     n <- integer
-    return (Number (fromInteger n :: Double))
-idParser      = do
+    return (Number (fromInteger n))
+idParser = do
     id <- identifier
     return (Id id)
-opTypeParser  = do
-    op <- identifier
-    return (toOpType op)
-opParser      = do { op <- braces
-                ; op2 <- identifier
-                --; l <- lexeme
-                --; r <- lexeme
-                --; let optype = parse op
-                --; let l = parse l
-                --; let r = parse r
-                ; return (op2) }
-if0Parser     = return (Id "TODO") :: Parser u FAE
-funParser     = return (Id "TODO") :: Parser u FAE
-appParser     = return (Id "TODO") :: Parser u FAE
-withParser    = return (Id "TODO") :: Parser u FAE
+opTypeParser = do
+        reserved "+"
+        return Add
+    <|> do
+        reserved "-"
+        return Sub
+    <|> do
+        reserved "*"
+        return Mul
+opParser = braces $ do
+    opType <- opTypeParser
+    lhs    <- parser
+    rhs    <- parser
+    return (Op opType lhs rhs)
+if0Parser = braces $ do
+    reserved "if0"
+    cond <- parser
+    on0  <- parser
+    non0 <- parser
+    return (If0 cond on0 non0)
+funParser = braces $ do
+    reserved "fun"
+    param <- braces identifier
+    body  <- parser
+    return (Fun param body)
+appParser = braces $ do
+    fun <- parser
+    arg <- parser
+    return (App fun arg)
+withParser = braces $ do
+    reserved "with"
+    (name, expr) <- braces (do
+        name <- identifier
+        expr <- parser
+        return (name, expr))
+    body <- parser
+    return (App (Fun name body) expr)
+
+-- parser implementation using operators
+{-
+floatParser   = Number <$> float
+integerParser = Number . fromIntegral <$> integer
+idParser      = Id <$> identifier
+opTypeParser  = reserved "+" $> Add
+            <|> reserved "-" $> Sub
+            <|> reserved "*" $> Mul
+opParser   = braces $ Op <$> opTypeParser <*> parser <*> parser
+if0Parser  = braces $ reserved "if0" >> If0 <$> parser <*> parser <*> parser
+funParser  = braces $ reserved "fun" >> Fun <$> braces identifier <*> parser
+appParser  = braces $ App <$> parser <*> parser
+withParser = braces $ do reserved "with"
+                         (name, expr) <- braces $ (,) <$> identifier <*> parser
+                         body <- parser
+                         return $ App (Fun name body) expr
+-}
 
 parser :: Parser FAE
 parser = choice $ map try
@@ -132,13 +172,3 @@ runParse = do
             then putStrLn "Closing parser..."
             else doParse input >> inputLoop
     inputLoop
-
-
-{-
-    Important Haskell concepts used in this file so far:
-        - modules, imports
-        - do syntax, case-of syntax
-        - data constructors, type synonyms
-        - typeclasses, `deriving`
-        - Either a b, Functor f, Applicative f, Monad m, IO a
--}
